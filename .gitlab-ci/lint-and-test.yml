@@ -1,0 +1,37 @@
+stages:
+  - lint
+  - commitlint
+  - test
+
+lint:
+  stage: lint
+  image: node:20
+  script:
+    - npm ci
+    - npm run lint
+    - npx prettier --check .
+
+commitlint:
+  stage: commitlint
+  image: node:20
+  before_script:
+    - npm ci
+  script:
+    # If you use conventional commits, you can check the last commit message:
+    - npx commitlint --from=HEAD~1 --to=HEAD --config commitlint.config.js || echo "Commitlint failed (for PRs, check manually)"
+  # For merge requests, you may want to use a custom script or GitLab plugin for PR title checks
+
+frontend_tests:
+  stage: test
+  image: node:20
+  script:
+    - npm ci
+    - npm test
+
+backend_tests:
+  stage: test
+  image: node:20
+  script:
+    - cd backend
+    - npm install
+    - npm run test

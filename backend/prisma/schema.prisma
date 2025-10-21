@@ -1,0 +1,434 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum RequestStatus {
+  AWAITING
+  APPROVED
+  DECLINED
+}
+
+enum Session {
+  AM
+  PM
+  AH
+}
+
+enum FilterType {
+  EVENTS
+  USERS
+}
+
+enum LeaveType {
+  ANNUAL
+  COMPASSIONATE
+  PARENTAL
+  SICK
+  UNPAID
+}
+
+enum Preference {
+  PREFERENCE1
+  PREFERENCE2
+  PREFERENCE3
+}
+
+// Models
+model Activity {
+  // Primary key
+  id Int @id
+
+  // Scalar fields
+  name String @db.VarChar(255)
+
+  // Foreign keys
+  group_id    Int?
+  location_id Int?
+
+  // Relations
+  activityGroup ActivityGroup? @relation(fields: [group_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Activity_ibfk_1")
+  location      Location?      @relation(fields: [location_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Activity_ibfk_2")
+  events        Event[]
+
+  // Indexes
+  @@index([group_id], map: "group_id")
+  @@index([location_id], map: "location_id")
+}
+
+model ActivityGroup {
+  // Primary key
+  id Int @id
+
+  // Scalar fields
+  name String? @db.VarChar(255)
+
+  // Relations
+  activities Activity[]
+}
+
+model AssignmentRequest {
+  // Primary key
+  id Int @id @default(autoincrement())
+
+  // Scalar fields
+  status RequestStatus @default(AWAITING)
+
+  // Foreign keys
+  user_id  Int
+  event_id Int
+
+  // Relations
+  user                          User                            @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "AssignmentRequest_ibfk_1")
+  event                         Event                           @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "AssignmentRequest_ibfk_2")
+  AssignmentRequestNotification AssignmentRequestNotification[]
+
+  @@unique([user_id, event_id])
+  // Indexes
+  @@index([event_id], map: "event_id")
+  @@index([user_id], map: "user_id")
+}
+
+model AssignmentRequestNotification {
+  // Primary key
+  id Int @id @default(autoincrement())
+
+  // Scalar fields
+  created_at         DateTime @default(now())
+  is_read            Boolean  @default(false)
+  requires_action    Boolean  @default(false)
+  user_id            Int
+  assignment_request Int
+
+  // Relations
+  user              User              @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  assignmentRequest AssignmentRequest @relation(fields: [assignment_request], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // Indexes
+  @@index([user_id], map: "user_id")
+  @@index([assignment_request], map: "assignment_request")
+}
+
+model Campus {
+  // Primary key
+  id Int @id
+
+  // Scalar fields
+  name    String  @db.VarChar(255)
+  address String? @db.VarChar(255)
+
+  // Foreign keys
+  hospital_id Int?
+
+  // Relations
+  hospital  Hospital?  @relation(fields: [hospital_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Campus_ibfk_1")
+  locations Location[]
+  rosters   Roster[]
+  users     User[]
+
+  // Indexes
+  @@index([hospital_id], map: "hospital_id")
+}
+
+model Designation {
+  // Primary key
+  id Int @id
+
+  // Scalar fields
+  title       String  @db.VarChar(255)
+  description String? @db.VarChar(255)
+
+  // Relations
+  eventAssignments EventAssignment[]
+  users            User[]
+}
+
+model Event {
+  // Primary key
+  id Int @id
+
+  // Scalar fields
+  start_time DateTime @db.DateTime(0)
+  end_time   DateTime @db.DateTime(0)
+  on_call    Boolean  @default(false)
+  pay        Int      @default(0)
+
+  // Foreign keys
+  activity_id Int?
+  location_id Int
+
+  // Relations
+  activity           Activity?           @relation(fields: [activity_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Event_ibfk_1")
+  location           Location            @relation(fields: [location_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Event_ibfk_2")
+  assignmentRequests AssignmentRequest[]
+  eventAssignments   EventAssignment[]
+  Swap               Swap[]              @relation(map: "Swap_ibfk_3")
+  eventSessions      EventSession[] // New relation for many-to-many
+
+  // Indexes
+  @@index([activity_id], map: "activity_id")
+  @@index([location_id], map: "location_id")
+}
+
+model EventAssignment {
+  // Primary key
+  id Int @id
+
+  // Foreign keys
+  event_id       Int
+  user_id        Int
+  designation_id Int?
+
+  // Relations
+  event       Event        @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "EventAssignment_ibfk_1")
+  user        User         @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "EventAssignment_ibfk_2")
+  designation Designation? @relation(fields: [designation_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "EventAssignment_ibfk_3")
+
+  // Indexes
+  @@index([designation_id], map: "designation_id")
+  @@index([event_id], map: "event_id")
+  @@index([user_id], map: "user_id")
+}
+
+model EventSession {
+  // Primary key
+  id Int @id @default(autoincrement())
+
+  // Foreign keys
+  event_id Int
+  session  Session
+
+  // Relations
+  event Event @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@unique([event_id, session]) // Prevent duplicate sessions for same event
+  @@index([event_id])
+}
+
+model Hospital {
+  // Primary key
+  id Int @id
+
+  // Scalar fields
+  name    String  @db.VarChar(255)
+  address String? @db.VarChar(255)
+
+  // Relations
+  campuses Campus[]
+  rosters  Roster[]
+  users    User[]
+}
+
+model Leave {
+  // Primary key
+  id Int @id
+
+  // Scalar fields
+  start_date DateTime      @db.DateTime(0)
+  end_date   DateTime      @db.DateTime(0)
+  status     RequestStatus @default(AWAITING)
+  leaveType  LeaveType     @default(ANNUAL)
+
+  // Foreign keys
+  user_id Int
+
+  // Relations
+  user              User                @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Leave_ibfk_1")
+  LeaveNotification LeaveNotification[]
+
+  // Indexes
+  @@index([user_id], map: "user_id")
+}
+
+model LeaveNotification {
+  // Primary key
+  id Int @id @default(autoincrement())
+
+  // Scalar fields
+  created_at      DateTime @default(now())
+  is_read         Boolean  @default(false)
+  requires_action Boolean  @default(false)
+  user_id         Int
+  leave_request   Int
+
+  // Relations
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  leave Leave @relation(fields: [leave_request], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // Indexes
+  @@index([user_id], map: "user_id")
+  @@index([leave_request], map: "leave_request")
+}
+
+model Location {
+  // Primary key
+  id Int @id
+
+  // Scalar fields
+  name String @db.VarChar(255)
+
+  // Foreign keys
+  campus_id Int
+
+  // Relations
+  campus     Campus     @relation(fields: [campus_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Location_ibfk_1")
+  activities Activity[]
+  events     Event[]
+
+  // Indexes
+  @@index([campus_id], map: "campus_id")
+}
+
+model Roster {
+  // Primary key
+  id Int @id
+
+  // Scalar fields
+  week_start DateTime? @db.DateTime(0)
+
+  // Foreign keys
+  campus_id   Int?
+  hospital_id Int?
+
+  // Relations
+  campus   Campus?   @relation(fields: [campus_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Roster_ibfk_1")
+  hospital Hospital? @relation(fields: [hospital_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Roster_ibfk_2")
+
+  // Indexes
+  @@index([campus_id], map: "campus_id")
+  @@index([hospital_id], map: "hospital_id")
+}
+
+model User {
+  // Primary key
+  id Int @id @default(autoincrement())
+
+  // Scalar fields
+  first_name String      @db.VarChar(255)
+  last_name  String      @db.VarChar(255)
+  email      String      @unique @db.VarChar(255)
+  password   String      @db.VarChar(255)
+  phone      String?     @db.VarChar(255)
+  role       String?     @db.VarChar(255)
+  preference Preference?
+
+  // Foreign keys
+  designation_id Int?
+  campus_id      Int?
+  hospital_id    Int
+
+  // Relations
+  designation                   Designation?                    @relation(fields: [designation_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "User_ibfk_1")
+  campus                        Campus?                         @relation(fields: [campus_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "User_ibfk_2")
+  hospital                      Hospital                        @relation(fields: [hospital_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "User_ibfk_3")
+  assignmentRequests            AssignmentRequest[]
+  eventAssignments              EventAssignment[]
+  leaves                        Leave[]
+  dashboardPreference           DashboardPreference?
+  savedFilters                  SavedFilters[]
+  swapsFrom                     Swap[]                          @relation("SwapFromUser")
+  swapsTo                       Swap[]                          @relation("SwapToUser")
+  SwapNotification              SwapNotification[]
+  LeaveNotification             LeaveNotification[]
+  AssignmentRequestNotification AssignmentRequestNotification[]
+
+  // Indexes
+  @@index([campus_id], map: "campus_id")
+  @@index([designation_id], map: "designation_id")
+  @@index([hospital_id], map: "hospital_id")
+}
+
+model DashboardPreference {
+  // Primary key
+  id Int @id @default(autoincrement())
+
+  // Scalar fields
+  whos_on_duty    Boolean @default(true)
+  upcoming_shifts Boolean @default(true)
+  upcoming_leaves Boolean @default(true)
+  open_shifts     Boolean @default(true)
+  team_roster     Boolean @default(true)
+
+  // Foreign keys
+  user_id Int @unique
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id])
+
+  // Indexes
+  @@index([user_id], map: "user_id")
+}
+
+model SavedFilters {
+  // Primary key
+  id Int @id @default(autoincrement())
+
+  // Scalar fields
+  name         String?    @db.VarChar(255)
+  filterType   FilterType
+  sessions     Json? // Store as ["AM", "PM"]
+  locations    Json? // Store as ["PMC", "TSC Campus", "Clinical Support"]
+  designations Json? // Store as ["Nurse", "Doctor", "Surgeon"]
+
+  // Foreign keys
+  user_id Int
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // Indexes
+  @@index([user_id], map: "user_id")
+}
+
+model Swap {
+  // Primary key
+  id Int @id @default(autoincrement())
+
+  // Scalar fields
+  message String?       @db.VarChar(255)
+  status  RequestStatus @default(AWAITING)
+
+  // Foreign keys
+  from_user Int
+  to_user   Int
+  event_id  Int
+
+  // Relations
+  fromUser         User               @relation("SwapFromUser", fields: [from_user], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Swap_ibfk_1")
+  toUser           User               @relation("SwapToUser", fields: [to_user], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Swap_ibfk_2")
+  event            Event              @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Swap_ibfk_3")
+  SwapNotification SwapNotification[]
+
+  @@unique([from_user, to_user, event_id])
+  // Indexes
+  @@index([event_id], map: "event_id")
+  @@index([from_user], map: "from_user")
+  @@index([to_user], map: "to_user")
+}
+
+model SwapNotification {
+  // Primary key
+  id Int @id @default(autoincrement())
+
+  // Scalar fields
+  created_at      DateTime @default(now())
+  is_read         Boolean  @default(false)
+  requires_action Boolean  @default(false)
+  to_user         Int
+  from_user       Int
+  swap_request    Int
+
+  // Relations
+  fromUser User @relation(fields: [from_user], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  swap     Swap @relation(fields: [swap_request], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // Indexes
+  @@index([from_user], map: "from_user")
+  @@index([swap_request], map: "swap_request")
+}
