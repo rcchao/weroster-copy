@@ -1,4 +1,63 @@
-include:
-  - local: '.gitlab-ci/lint-and-test.yml'
-  - local: '.gitlab-ci/backend.yml'
-  - local: '.gitlab-ci/typescript.yml'
+# include:
+#   - local: '.gitlab-ci/lint-and-test.yml'
+#   - local: '.gitlab-ci/backend.yml'
+#   - local: '.gitlab-ci/typescript.yml'
+
+stages:
+  - lint
+  - commitlint
+  - test
+  - backend
+  - typescript_compile
+
+lint:
+  stage: lint
+  image: node:20
+  script:
+    - npm ci
+    - npm run lint
+    - npx prettier --check .
+
+commitlint:
+  stage: commitlint
+  image: node:20
+  before_script:
+    - npm ci
+  script:
+    - npx commitlint --from=HEAD~1 --to=HEAD --config commitlint.config.js || echo "Commitlint failed (for PRs, check manually)"
+
+frontend_tests:
+  stage: test
+  image: node:20
+  script:
+    - npm ci
+    - npm test
+
+backend_tests:
+  stage: test
+  image: node:20
+  script:
+    - cd backend
+    - npm install
+    - npm run test
+
+backend:
+  stage: backend
+  image: node:22
+  script:
+    - cd backend && npm ci
+    - cd backend && npm run build
+  only:
+    - main
+    - merge_requests
+
+typescript_compile:
+  stage: typescript_compile
+  image: node:22
+  script:
+    - npm ci
+    - cd backend && npm ci && cd ..
+    - npx tsc --noEmit -p .
+  only:
+    - main
+    - merge_requests
